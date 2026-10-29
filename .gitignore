@@ -1,0 +1,13 @@
+dataset/
+# Local development utilities; exclude from application commits.
+/tests/
+/scripts/
+.venv/
+.cache/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+*.log
+test-results/
+/build/
+/dist/

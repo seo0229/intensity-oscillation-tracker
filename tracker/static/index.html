@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7f8">
+  <title>Intensity — Cell oscillation tracker</title>
+  <link rel="stylesheet" href="/static/style.css?v=0.2.3">
+  <script defer src="/static/app.js?v=0.2.3"></script>
+</head>
+<body>
+<header class="app-header">
+  <a class="brand" href="/" aria-label="Intensity home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M3 18h5l3-9 5 17 5-21 3 13h5"/></svg></span><span>intensity<span class="brand-sub">CELL OSCILLATION TRACKER</span></span></a>
+  <div class="header-actions"><span class="local-indicator"><i></i> Runs on your computer</span><button class="button secondary" id="openButton"><span aria-hidden="true">＋</span> Open recording</button></div>
+</header>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-heading"><h2>Recordings</h2><span id="recordingCount" class="count">0</span></div>
+    <div id="recordingList" class="recording-list"><p class="muted">Looking for recordings…</p></div>
+    <div class="settings-section">
+      <div class="sidebar-heading"><h2>Detection</h2><span class="count">Cellpose</span></div>
+      <label class="slider-label" for="radius">Circle radius <output id="radiusValue">12 px</output></label>
+      <input id="radius" type="range" min="4" max="35" value="12">
+      <div class="range-caption"><span>Smaller</span><span>Larger</span></div>
+      <label class="slider-label" for="sensitivity">Detection sensitivity <output id="sensitivityValue">Standard</output></label>
+      <input id="sensitivity" type="range" min="0" max="100" value="50">
+      <div class="range-caption"><span>Less sensitive</span><span>More sensitive</span></div>
+      <p class="help">Cellpose identifies cell boundaries. Higher sensitivity can include dimmer regions. Circles must fit inside a boundary with a 2 px margin.</p>
+      <button id="analyzeButton" class="button primary full" disabled><span aria-hidden="true">↻</span> Analyze recording</button>
+      <p id="detectionHint" class="help small">Standard sensitivity uses the settings tested on your dataset. Reanalyzing replaces the current circles.</p>
+    </div>
+    <details class="advanced">
+      <summary>Signal settings</summary>
+      <label for="baseline">Baseline · first N frames<input id="baseline" type="number" min="1" max="1000000" value="10"></label>
+      <label for="prominence">Minimum peak prominence (%)<input id="prominence" type="number" min="0.01" max="1000" step="0.5" value="5"></label>
+      <label for="separation">Minimum peak spacing (frames)<input id="separation" type="number" min="1" max="1000000" value="5"></label>
+      <p class="help">Prominence is relative to the starting baseline and must also exceed 3× estimated noise. Peaks are measured on the original trace.</p>
+      <button class="button secondary full" id="applySignal" disabled>Update measurements</button>
+    </details>
+    <div class="sidebar-footer"><span class="version-dot"></span> Local workspace <span>v0.2</span></div>
+  </aside>
+  <main class="workspace">
+    <div class="workspace-heading">
+      <div><div class="eyebrow">ANALYSIS WORKSPACE</div><h1 id="recordingTitle">Your cells, over time.</h1><div id="recordingMeta" class="meta-line">Open a fluorescence recording to get started.</div></div>
+      <button id="exportButton" class="button secondary" disabled><span aria-hidden="true">↓</span> Export results</button>
+    </div>
+    <div id="timingBanner" class="timing-banner" hidden></div>
+    <div id="recordingNotice" class="notice" hidden></div>
+    <div id="progressPanel" class="progress-panel" hidden><div><span id="progressMessage" role="status">Preparing analysis…</span><span id="progressPercent">0%</span></div><progress id="progressBar" value="0" max="1"></progress></div>
+    <div class="workspace-controls"><div class="section-label"><span class="status-dot" id="readyDot"></span><span id="analysisStatus">No recording selected</span></div><div class="signal-switch"><span>Signal</span><div class="segmented" aria-label="Signal display"><button id="rawMode" class="active" aria-pressed="true">Raw intensity</button><button id="relativeMode" aria-pressed="false">ΔF/F₀</button></div></div></div>
+    <div class="analysis-grid">
+      <section class="panel viewer-panel" aria-label="Recording viewer">
+        <div class="panel-header"><h2>Recording</h2><label class="inline-check"><input id="referenceMode" type="checkbox" checked> Mean reference</label></div>
+        <div class="viewer-tools"><div class="segmented tools" aria-label="Circle editing mode"><button data-tool="select" class="active" aria-pressed="true">Select</button><button data-tool="move" aria-pressed="false">Move</button><button data-tool="add" aria-pressed="false">＋ Add</button></div><div class="viewer-options"><label class="inline-check"><input id="outlines" type="checkbox"> Outlines</label><label class="inline-check"><input id="labels" type="checkbox"> IDs</label><button class="icon-button" id="resetZoom" title="Reset zoom" aria-label="Reset zoom">Fit</button></div></div>
+        <div class="image-viewport" id="viewport"><canvas id="imageCanvas" aria-label="Fluorescence image with selectable circular measurement regions" tabindex="0"></canvas><div id="viewerPlaceholder" class="viewer-placeholder"><span class="empty-orbit" aria-hidden="true"></span><span>Your recording will appear here</span></div><span id="viewerBadge" class="viewer-badge" hidden></span><span id="zoomBadge" class="zoom-badge">1.0×</span></div>
+        <div class="playback"><button id="playButton" class="icon-button play-button" aria-label="Play recording" disabled>▶</button><input id="frameSlider" aria-label="Video frame" type="range" min="0" max="0" value="0" disabled><span id="frameLabel" class="frame-label">— / —</span><select id="playSpeed" aria-label="Playback speed"><option value="5">5 fps</option><option value="10" selected>10 fps</option><option value="20">20 fps</option></select></div>
+        <div class="viewer-footer"><div class="legend"><span><i class="legend-dot included"></i>Included</span><span><i class="legend-dot selected"></i>Selected</span><span><i class="legend-dot excluded"></i>Excluded</span></div><label class="brightness-label" for="brightness">Display<input id="brightness" type="range" min="0.5" max="3" step="0.1" value="1.2" aria-label="Display brightness"></label></div>
+        <div class="viewer-instruction" id="viewerInstruction">Click a circle to inspect its trace. Scroll to zoom; drag the background to pan.</div>
+      </section>
+      <section class="panel selected-panel" aria-label="Selected region intensity">
+        <div class="panel-header"><div><span class="eyebrow">INDIVIDUAL TRACE</span><h2 id="selectedTitle">Select a region</h2></div><label class="inline-check"><input id="includeSelected" type="checkbox" disabled> Checked</label></div>
+        <div class="selected-detail"><span id="selectedCoordinates">Fixed circular measurement region</span><button id="deleteSelected" class="text-button danger" disabled>Remove</button></div>
+        <div class="chart-wrap"><canvas id="traceCanvas" role="img" aria-label="Selected region intensity over time"></canvas><span class="chart-empty" id="traceEmpty">Select a circle in the recording<br>to explore its intensity.</span></div>
+        <div class="trace-metrics"><div><span>Detected peaks</span><strong id="peakCount">—</strong></div><div><span>Peaks / min</span><strong id="peakRate">—</strong></div><div><span>Mean intensity</span><strong id="meanIntensity">—</strong></div></div>
+        <div id="traceReadout" class="chart-readout">Click a graph to jump to that frame.</div>
+        <p id="baselineNote" class="panel-note">Measurements use original pixel values. Display brightness does not affect results.</p>
+      </section>
+      <section class="panel population-panel" aria-label="Checked region summary">
+        <div class="panel-header population-heading"><div><span class="eyebrow">RECORDING SUMMARY</span><h2>Checked regions <span id="checkedRegionCount" class="count">0</span></h2></div><div class="segmented population-tabs" role="tablist" aria-label="Checked region view"><button id="metricsTab" role="tab" aria-selected="true" aria-controls="metricsView" class="active">Metrics</button><button id="populationTraceTab" role="tab" aria-selected="false" aria-controls="populationTraceView" tabindex="-1">Average trace</button></div></div>
+        <div id="metricsView" role="tabpanel" aria-labelledby="metricsTab" tabindex="0">
+          <p id="metricsEmpty" class="empty-list">Analyze a recording to see checked-region metrics.</p>
+          <div id="metricsContent" class="metrics-content" hidden>
+            <div class="metric-headlines"><div><span>Average peaks</span><strong id="checkedMeanPeaks">—</strong><span>per checked region</span></div><div><span>Time between peaks</span><strong id="checkedPeakInterval">—</strong><span>median interval</span></div></div>
+            <h3 class="metrics-subheading">Regions by peak count</h3>
+            <div class="peak-counts"><div><span>No peaks</span><strong id="noPeaksCount">—</strong></div><div><span>Exactly 1 peak</span><strong id="singlePeakCount">—</strong></div><div><span>More than 1 peak</span><strong id="multiplePeaksCount">—</strong></div></div>
+            <p id="metricsTiming" class="metrics-timing"></p>
+          </div>
+          <p class="panel-note">Only checked regions contribute. The average includes regions with no peaks. Time between peaks is the median of each eligible region’s median interval.</p>
+        </div>
+        <div id="populationTraceView" role="tabpanel" aria-labelledby="populationTraceTab" tabindex="0" hidden>
+          <div class="population-trace-controls"><span id="includedCount" class="count">0 regions</span><label class="inline-check"><input id="showSpread" type="checkbox" checked> ± SD</label></div>
+          <div class="chart-wrap population-chart"><canvas id="populationCanvas" role="img" aria-label="Average intensity across checked regions over time"></canvas><span class="chart-empty" id="populationEmpty">The average of your checked regions<br>will appear here.</span></div>
+          <div class="population-footer"><span id="populationSummary">Each checked region contributes equally.</span><span class="small muted">Shading = variation across regions</span></div>
+          <p class="panel-note">Out-of-phase peaks can cancel in the average trace. Use Metrics for a summary of individual-region peaks.</p>
+        </div>
+      </section>
+      <section class="panel regions-panel" aria-label="Region list">
+        <div class="panel-header"><h2>Regions <span id="roiCount" class="count">0</span></h2><input id="regionSearch" type="search" placeholder="Find ID…" aria-label="Find region by ID"></div>
+        <div class="region-controls"><div class="region-bulk-actions"><button id="checkAllRegions" class="button secondary" aria-label="Check all regions" disabled>Check all</button><button id="uncheckAllRegions" class="button secondary" aria-label="Uncheck all regions" disabled>Uncheck all</button></div><label class="region-sort" for="regionSort">Sort<select id="regionSort" aria-label="Sort regions" disabled><option value="id">Region ID</option><option value="peaks">Most peaks first</option></select></label></div>
+        <div class="region-table-header"><span>Include</span><span>Region</span><span>Peaks</span><span>Mean</span></div>
+        <div id="regionList" class="region-list"><p class="empty-list">Detected regions will appear here.</p></div>
+        <div class="region-list-footer">Checkboxes control the metrics and average trace. Check/uncheck all applies to the whole recording, including search results you cannot see.</div>
+      </section>
+    </div>
+    <footer class="workspace-footer"><span><i class="status-dot"></i> Fixed regions · Original fluorescence values</span><span>No background subtraction or bleaching correction</span></footer>
+  </main>
+</div>
+<dialog id="openDialog"><form id="openForm"><div class="dialog-header"><h2>Open a recording</h2><button class="icon-button" type="button" data-close="openDialog" aria-label="Close">×</button></div><p>Select a local TIFF stack. Keep its accompanying TID and Experiment.json files in the same folder.</p><button type="button" class="button primary full" id="browseNative">Browse files on this computer</button><div class="dialog-divider">or enter a local file path</div><label for="filePath">Recording path<input type="text" id="filePath" placeholder="C:\\…\\recording.tif" autocomplete="off"></label><p id="openError" class="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="button secondary" data-close="openDialog">Cancel</button><button type="submit" class="button primary" id="openPathButton">Open recording</button></div></form></dialog>
+<dialog id="exportDialog"><div class="dialog-header"><h2>Export your analysis</h2><button class="icon-button" data-close="exportDialog" aria-label="Close">×</button></div><p>Save the current measurements and circle placements.</p><a id="exportMetrics" class="export-option" download><strong>Checked-region metrics <span>CSV ↗</span></strong><small>Average peaks, regions with 0, 1, or more than 1 peak, and time between peaks.</small></a><a id="exportTraces" class="export-option" download><strong>Intensity traces <span>CSV ↗</span></strong><small>Checked regions, frame times, and the population mean. Uses the selected signal view.</small></a><a id="exportSummary" class="export-option" download><strong>Region measurements <span>CSV ↗</span></strong><small>All regions, inclusion flags, positions, and peak measurements.</small></a><a id="exportSession" class="export-option" download><strong>Complete analysis <span>JSON ↗</span></strong><small>All traces, metrics, regions, source paths, and analysis settings for your records.</small></a></dialog>
+<div id="toast" class="toast" role="alert" hidden><span id="toastText"></span><button class="icon-button" id="dismissToast" aria-label="Dismiss message">×</button></div>
+</body>
+</html>
