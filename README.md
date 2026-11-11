@@ -2,7 +2,30 @@
 
 A local fluorescence analysis app for stationary cells. Cellpose identifies cell boundaries, fixed circles sample each accepted region, and selecting a circle shows its intensity trace. Five simple metrics summarize peaks in the checked regions.
 
-## Run
+## Windows desktop app
+
+Extract the entire **`Intensity-Windows-v0.2.2.zip`**, then double-click **`Intensity.exe`** inside the extracted **Intensity** folder. Keep that entire folder together, including `_internal`; the executable depends on its bundled libraries and model. Python, a terminal, and a separate browser are not needed to run this version.
+
+The desktop window uses the same frontend, FastAPI backend, Cellpose model, circle rules, measurements, and exports as the browser version. It starts a private loopback server on an available port and stops it when the window closes. The NVIDIA GPU is used when available. Without a compatible GPU, Cellpose automatically uses the CPU. If GPU initialization or inference fails (for example, insufficient GPU memory or a driver error), version 0.2.2 retries once on the CPU and keeps using the CPU for that app session. The status text identifies CPU analysis. The same model, circle rules, and intensity measurements are used; CPU segmentation uses float32 instead of GPU bfloat16, so boundaries can differ slightly. CPU processing can take substantially longer. Cellpose weights and CUDA libraries are included, so the portable folder is several gigabytes and does not download a model on first use. Since version 0.2.1, the window uses bundled Qt WebEngine/Chromium instead of Python.NET, removing the `Python.Runtime.Loader.Initialize` loading failure from the startup path.
+
+Use **Open recording** to choose a file with the Windows file picker. The existing TIFF/TID companion-file requirements still apply. Recordings are not included in the build. A `dataset` folder beside `Intensity.exe` appears in the library; `INTENSITY_DATASET` can point to an existing folder elsewhere. Exports open a Windows Save dialog. Export results before closing the app.
+
+Requires 64-bit Windows 10/11. The viewer and its Chromium runtime are included; Python.NET, .NET, and Microsoft Edge WebView2 are not required. Desktop logs and window storage are written to `%LOCALAPPDATA%\Intensity`, not into the application folder. Set `INTENSITY_APP_DATA` to use another writable location.
+
+To build the portable folder on Windows from the source:
+
+```powershell
+uv sync --locked --extra desktop --extra build
+uv run --no-sync python -m tracker.build_windows --dist-dir dist/windows-v0.2.2 --zip
+```
+
+The build uses cached `.cache/cellpose-models/cpsam_v2` weights. Run an analysis once if they are missing, or pass `--model C:\path\to\cpsam_v2`. This command writes `dist/windows-v0.2.2/Intensity`, a ZIP64 archive, and a SHA-256 checksum beside it. Without `--dist-dir`, the parent output directory is `dist`. Every archived file is checked for integrity. The folder contains dependency versions and the model checksum in `build-info.json`, runtime licenses in `_internal/licenses`, and a short `Read me.txt`. Build output, datasets, tests, and local caches are excluded from Git. Rebuild after changing application source; an existing executable does not read the source checkout. Existing app folders are never replaced automatically: move the previous folder first or use a new `--dist-dir` to keep any recordings and exports beside it safe.
+
+To share the app, send that ZIP and have the recipient extract it into a new local folder, separately from previous builds. Data files are not included. No installer or manual DLL-unblocking step is part of this version's setup. The build checks for required Chromium files and rejects packages containing the obsolete Python.NET bridge. `Intensity.exe --check-desktop --report desktop-check.json` checks the packaged viewer libraries without opening a window; startup errors also record their actual exception in the desktop log.
+
+For desktop development without building: `uv run --extra desktop python -m tracker.desktop`. The original browser launcher remains available below.
+
+## Run from source in a browser
 
 After setup, double-click **`start.bat`** on Windows. The app opens at **http://127.0.0.1:8765**. Keep the launcher running while using the app; close it to stop the server.
 
@@ -76,4 +99,4 @@ Local unit and API tests cover companion-file loading, compressed stacks, actual
 
 Separate validation with the real Cellpose model read all stored frames of the three local recordings, checked that the raw reference remained unchanged, and independently verified sampled intensity means and circle containment. Standard settings produced 561, 521, and 770 circles respectively. These are candidate measurement regions, not verified cell counts. There are no manually annotated ground-truth masks for this dataset.
 
-Source layout: `tracker/recordings.py` handles file loading; `tracker/cellpose_detector.py` loads and runs the model; `tracker/analysis.py` places circles and measures traces; `tracker/metrics.py` summarizes peaks for the checked regions; `tracker/server.py` exposes the local API; `tracker/static/` contains the browser interface.
+Source layout: `tracker/recordings.py` handles file loading; `tracker/cellpose_detector.py` loads and runs the model; `tracker/analysis.py` places circles and measures traces; `tracker/metrics.py` summarizes peaks for the checked regions; `tracker/server.py` exposes the local API; `tracker/static/` contains the browser interface. `tracker/desktop.py` owns the desktop/server lifecycle, `tracker/desktop_window.py` contains the Qt viewer and native dialogs, `tracker/paths.py` locates bundled assets and writable data, and `tracker/build_windows.py` plus `tracker/packaging/` build the executable and distribution ZIP.

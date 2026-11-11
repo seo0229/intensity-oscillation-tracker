@@ -13,7 +13,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -24,8 +24,10 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .analysis import Detection, detect_regions, extract_traces, summarize, validate_roi
 from .recordings import Recording, open_recording
+from .paths import application_directory
+from . import __version__
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = application_directory()
 STATIC = Path(__file__).parent / "static"
 app = FastAPI(title="Intensity Oscillation Tracker", docs_url=None, redoc_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
@@ -33,6 +35,7 @@ pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="analysis")
 recordings: dict[str, Recording] = {}
 sessions: dict[str, "Session"] = {}
 catalog_lock = threading.RLock()
+file_picker: Callable[[], str | None] | None = None
 
 
 class Parameters(BaseModel):
@@ -147,7 +150,7 @@ def list_recordings():
 
 @app.get("/api/health")
 def health():
-    return {"app": "intensity-tracker", "version": "0.2.0", "detector": "cellpose"}
+    return {"app": "intensity-tracker", "version": __version__, "detector": "cellpose"}
 
 
 @app.post("/api/recordings/open")
@@ -157,6 +160,11 @@ def open_path(body: OpenRequest):
 
 @app.post("/api/browse")
 def browse():
+    if file_picker is not None:
+        path = file_picker()
+        return {"recording": register(path) if path else None}
+    if getattr(sys, "frozen", False):
+        raise ValueError("The native file picker is unavailable. Paste the file path below instead.")
     script = "import tkinter as t; from tkinter import filedialog; import json; r=t.Tk(); r.withdraw(); r.attributes('-topmost',True); p=filedialog.askopenfilename(title='Open a fluorescence recording',filetypes=[('TIFF recordings','*.tif *.tiff *.tid')]); r.destroy(); print(json.dumps(p))"
     try:
         completed = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
