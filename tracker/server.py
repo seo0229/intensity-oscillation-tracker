@@ -24,7 +24,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .analysis import Detection, detect_regions, extract_traces, summarize, validate_roi
 from .recordings import Recording, open_recording
-from .paths import application_directory
+from .paths import application_directory, is_packaged
 from . import __version__
 
 ROOT = application_directory()
@@ -163,7 +163,7 @@ def browse():
     if file_picker is not None:
         path = file_picker()
         return {"recording": register(path) if path else None}
-    if getattr(sys, "frozen", False):
+    if is_packaged():
         raise ValueError("The native file picker is unavailable. Paste the file path below instead.")
     script = "import tkinter as t; from tkinter import filedialog; import json; r=t.Tk(); r.withdraw(); r.attributes('-topmost',True); p=filedialog.askopenfilename(title='Open a fluorescence recording',filetypes=[('TIFF recordings','*.tif *.tiff *.tid')]); r.destroy(); print(json.dumps(p))"
     try:

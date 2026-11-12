@@ -2,6 +2,14 @@
 
 A local fluorescence analysis app for stationary cells. Cellpose identifies cell boundaries, fixed circles sample each accepted region, and selecting a circle shows its intensity trace. Five simple metrics summarize peaks in the checked regions.
 
+## Mac desktop app
+
+On an Apple silicon Mac running macOS 14 Sonoma or later, double-click **Intensity-macOS-Apple-Silicon-v0.2.2.zip** in Finder. Move **Intensity.app** to Applications and open it. Choose **Open recording** to select a local recording. Cellpose runs on the CPU using weights included in the app.
+
+The Mac bundle contains its own arm64 Python runtime, Qt WebEngine, and analysis libraries. Logs and browser storage live in `~/Library/Application Support/Intensity`. This development build ships without Developer ID signing or Apple notarization. macOS may request approval on first open.
+
+From the project checkout, run `uv run --locked python -m tracker.build_macos` to create the ZIP and SHA-256 checksum in `dist/macos-v0.2.2`. The builder selects Mac wheels from `uv.lock`, verifies the downloaded runtime and native launcher's checksums, and preserves Unix file permissions and symbolic links in the ZIP. It uses the cached `.cache/cellpose-models/cpsam_v2` weights or a file supplied with `--model`. On a Mac, `/Applications/Intensity.app/Contents/MacOS/Intensity --check-desktop --report ~/Desktop/intensity-check.json` checks the bundled viewer. Use `--self-test "/path/to/recording.tif"` in place of `--check-desktop` to check the analysis engine.
+
 ## Windows desktop app
 
 Extract the entire **`Intensity-Windows-v0.2.2.zip`**, then double-click **`Intensity.exe`** inside the extracted **Intensity** folder. Keep that entire folder together, including `_internal`; the executable depends on its bundled libraries and model. Python, a terminal, and a separate browser are not needed to run this version.

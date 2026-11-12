@@ -1,4 +1,4 @@
-"""Native Windows window around the unchanged local web application."""
+"""Run the tracker in a native desktop window."""
 from __future__ import annotations
 
 import argparse
@@ -13,7 +13,7 @@ import sys
 import threading
 import time
 
-from .paths import application_directory, model_directory, runtime_directory
+from .paths import application_directory, is_packaged, model_directory, runtime_directory
 from . import __version__
 
 
@@ -84,7 +84,7 @@ def verify_recording(path: str) -> dict:
             np.testing.assert_allclose(trace[frame], pixels[rows, cols].mean(), rtol=1e-12)
     result = summarize(detection.rois, traces, recording.suggested_interval)
     assert len(recording.preview(0)) > 100
-    return dict(ok=True, frozen=bool(getattr(sys, "frozen", False)),
+    return dict(ok=True, frozen=is_packaged(),
                 frames=recording.frames, regions=len(detection.rois),
                 detection=detection.metadata, metrics=result["metrics"],
                 model_directory=str(model_directory()), raw_reference_preserved=True)
@@ -99,11 +99,18 @@ def check_desktop() -> dict:
 
     helpers = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.LibraryExecutablesPath))
     plugins = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath))
-    if not (helpers / "QtWebEngineProcess.exe").is_file():
+    helper = helpers / "QtWebEngineProcess.exe"
+    platform_plugin = plugins / "platforms" / "qwindows.dll"
+    if sys.platform == "darwin":
+        libraries = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.LibrariesPath))
+        helpers = libraries / "QtWebEngineCore.framework" / "Helpers"
+        helper = helpers / "QtWebEngineProcess.app" / "Contents" / "MacOS" / "QtWebEngineProcess"
+        platform_plugin = plugins / "platforms" / "libqcocoa.dylib"
+    if not helper.is_file():
         raise RuntimeError("The bundled Chromium helper is missing. Extract the complete app folder.")
-    if not (plugins / "platforms" / "qwindows.dll").is_file():
-        raise RuntimeError("The bundled Windows display plugin is missing. Extract the complete app folder.")
-    return dict(ok=True, frozen=bool(getattr(sys, "frozen", False)), app_version=__version__,
+    if not platform_plugin.is_file():
+        raise RuntimeError(f"The bundled display plugin is missing: {platform_plugin.name}")
+    return dict(ok=True, frozen=is_packaged(), app_version=__version__,
                 viewer="Qt WebEngine", pyside_version=pyside_version, qt_version=qVersion(),
                 chromium_version=qWebEngineChromiumVersion(), pythonnet_required=False,
                 webview2_required=False, helper_directory=str(helpers), plugin_directory=str(plugins))
@@ -128,7 +135,7 @@ def run_window(folder: Path):
         backend.start()
         runtime.write_text(json.dumps(dict(pid=os.getpid(), url=backend.url,
                                            version=__version__, viewer="Qt WebEngine",
-                                           frozen=bool(getattr(sys, "frozen", False)))), encoding="utf-8")
+                                           frozen=is_packaged())), encoding="utf-8")
         window = DesktopWindow(application, folder, backend.url)
         server.file_picker = window.picker.choose
         logging.info("Starting Intensity at %s; application directory %s", backend.url, application_directory())
@@ -150,7 +157,7 @@ def run_window(folder: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Intensity Windows desktop app")
+    parser = argparse.ArgumentParser(description="Intensity desktop app")
     parser.add_argument("--self-test", metavar="RECORDING", help="Verify the packaged analysis engine on a recording")
     parser.add_argument("--check-desktop", action="store_true", help="Check bundled desktop libraries without opening a window")
     parser.add_argument("--report", type=Path, help="JSON report for --self-test or --check-desktop")
@@ -183,7 +190,7 @@ def main():
         logging.shutdown()
     # Closing the app also ends any in-flight analysis, rather than keeping
     # Python's executor threads and GPU allocations alive after the window closes.
-    if getattr(sys, "frozen", False) and not diagnostic:
+    if is_packaged() and not diagnostic:
         os._exit(exit_code)
     return exit_code
 

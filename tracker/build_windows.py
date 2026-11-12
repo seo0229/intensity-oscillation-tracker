@@ -18,7 +18,7 @@ from . import __version__
 
 
 def prepare_assets(root: Path, model: Path) -> Path:
-    from PIL import Image, ImageDraw
+    from .packaging.icon import desktop_icon
     from packaging.requirements import Requirement
     from packaging.utils import canonicalize_name
 
@@ -27,13 +27,7 @@ def prepare_assets(root: Path, model: Path) -> Path:
     with model.open("rb") as stream:
         digest = hashlib.file_digest(stream, "sha256").hexdigest()
 
-    # Rasterize the same pulse mark used in the frontend, at Windows icon sizes.
-    icon = Image.new("RGBA", (256, 256))
-    drawing = ImageDraw.Draw(icon)
-    drawing.rounded_rectangle((0, 0, 255, 255), radius=52, fill="#087f8c")
-    points = [(3, 18), (8, 18), (11, 9), (16, 26), (21, 5), (24, 18), (29, 18)]
-    drawing.line([(x * 7 + 16, y * 7 + 16) for x, y in points], fill="white", width=14, joint="curve")
-    icon.save(assets / "intensity.ico", sizes=[(n, n) for n in (16, 24, 32, 48, 64, 128, 256)])
+    desktop_icon().save(assets / "intensity.ico", sizes=[(n, n) for n in (16, 24, 32, 48, 64, 128, 256)])
 
     # Include notices for the runtime dependency closure, without development tools.
     notices = assets / "licenses"
